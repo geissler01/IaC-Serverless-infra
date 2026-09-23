@@ -1,0 +1,12 @@
+# Compilación y artefactos de AWS SAM
+.aws-sam/
+samconfig.toml
+
+# Entornos virtuales y caché de Python
+.venv/
+__pycache__/
+*.pyc
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db

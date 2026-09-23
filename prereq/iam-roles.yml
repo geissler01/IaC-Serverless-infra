@@ -1,0 +1,187 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Roles IAM y politicas para CodeBuild, CodePipeline y Lambda
+
+Resources:
+  # 1. Rol para CodeBuild (compilacion y empaquetado)
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: # politica de confianza, define quien tiene permiso de ponerse este rol
+        Version: '2012-10-17' # version moderna del leguaje de permisos de iam
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com  # solo este servicio puede usar este rol
+            Action: sts:AssumeRole # declara que el servicio asuma el rol
+        # resumen: "Autorizo formalmente a los servidores de CodeBuild para que se pongan este rol cuando vayan a compilar mi código".
+      Path: /service-role/ # carpeta organizativa visual dentro de IAM.
+      Policies: # Politica embebida: define QUE puertas puede abrir CodeBuild
+        - PolicyName: codebuild-policy
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: # declaracion legal --> Sujeto, verbo y predicado... Resumen: "Te Permito (Effect: Allow) Descargar archivos (Action: s3:GetObject) de este Bucket (Resource: arn:aws:s3:::...)".
+              # permisos para escribir logs en cloudwatch
+              - Effect: Allow # el veredicto, solo Allow o Deny
+                Action: # El verbo, las acciones
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                # el objeto/ sobre que cosa exacta tiene permiso --> arn:particion:servicio:region:cuenta:recurso
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*' # /aws/codebuild/* es convencion de aws, ejemplo /aws/codebuild/<nombre-proyecto> o /aws/lambda/<nombre-funcion>
+              # Permiso para subir el archivo .zip al bucket S3 importado
+              - Effect: Allow
+                Action:
+                  - s3:GetObject # descargar archivo
+                  - s3:PutObject # escribir logs
+                  - s3:GetBucketLocation
+                Resource:
+                  - !ImportValue S3ArtifactsBucketArn # importa el arn del bucket creado en el stack anterior
+                  - !Sub # notacion necesaria para usar funciones anidadas, no pueden estar en la misma linea
+                    - '${Arn}/*'
+                    - Arn: !ImportValue S3ArtifactsBucketArn # El resultado final es: arn:aws:s3:::votanet-artefacts-841702867308-us-east-2/* (Permiso para todos los archivos dentro del bucket).
+              # Permiso para validar que la plasntilla CloudFormation/SAM este bien escrita
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplate
+                  - cloudformation:ValidateTemplate
+                Resource: '*' # comodin cuando no hay servicio al cual apuntar, nunca usar para borrar o cosas destructivas
+        
+  # ROL PARA CODEPIPELINE (el director de orquesta del CI/CD)
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: codepipeline-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Permiso para leer los artefactos versionados del bucket s3
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                  - s3:GetObjectVersion
+                Resource:
+                  - !ImportValue S3ArtifactsBucketArn
+                  - !Sub
+                    - '${Arn}/*'
+                    - Arn: !ImportValue S3ArtifactsBucketArn
+              # Permiso para ordenar a CodeBuild que inicie la compilacion
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds # permiso para ver el estado de la compilacion
+                  - codebuild:StartBuild # Permiso para presionar el boton de inicio de compilacion
+                Resource: '*'
+              # Permiso para que CodePipeline Pueda crear/actualizar stacks con CloudFormation
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DeleteStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:ValidateTemplate
+                Resource: '*'
+              # Permiso de PassRole: Autorizacion legal para que CodePipeline  "Le preste" el rol de despliegue a CloudFormation
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt CloudFormationDeployRole.Arn
+  
+  # 3. ROL para CloudFormation (para que cree los recursos reales)
+  CloudFormationDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudFormationDeployRole # nombre fisico del rol
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com # CloudFormation es quien asumirá este rol
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess # Permisos amplios
+  
+  # 4. Politica Gestionada para Lambda: Acceso a DynamoDB
+  LambdaPolicyDynamoDB:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: LambdaPolicyDynamoDB
+      Description: Permite a la funcion Lambda leer y escribir en la tabla DynamoDB importada
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Scan
+              - dynamodb:Query
+            Resource: !ImportValue DynamoLabArn # importacion de la dynamodb de la fase 1
+  
+  # 5. Politica Gestionada para Lambda: Registro de Logs en CloudWatch
+  LambdaPolicyCW:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: LambdaPolicyCW
+      Description: Permite a la funcion lambda registrar logs en CloudWatch
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+# SALIDAS: Enchufes para que el Pipeline y la Lambda los usen despues
+Outputs:
+  CodeBuildRoleArn:
+    Description: Arn del rol de CodeBuild
+    Value: !GetAtt CodeBuildRole.Arn
+    Export:
+      Name: CodeBuildRoleArn
+  
+  CodePipelineRoleArn:
+    Description: Arn del rol de CodePipeline
+    Value: !GetAtt CodePipelineRole.Arn
+    Export: 
+      Name: CodePipelineRoleArn
+  
+  CloudFormationDeployRoleArn:
+    Description: Arn del rol de despliegue de CloudFormation
+    Value: !GetAtt CloudFormationDeployRole.Arn
+    Export: 
+      Name: CloudFormationDeployRoleArn
+
+  LambdaPolicyDynamoDBArn:
+    Description: Arn de la politica para dynamoDB
+    Value: !Ref LambdaPolicyDynamoDB
+    Export: 
+      Name: LambdaPolicyDynamoDBArn
+
+  LambdaPolicyCWArn:
+    Description: Arn de la politica para CloudWatch 
+    Value: !Ref LambdaPolicyCW
+    Export: 
+      Name: LambdaPolicyCWArn
+
+

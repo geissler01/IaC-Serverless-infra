@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: bucket de s3 listo como pre-requisito
+
+Resources:
+  S3ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub votanet-artefacts-${AWS::AccountId}-${AWS::Region} # nombre del bucker
+      BucketEncryption: # cifrado en reposo
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration: # bloqueo de acceso publico
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: BorrarArtefactosViejos
+            Status: Enabled
+            ExpirationInDays: 30
+      # LoggingConfiguration: esto lo pide, pero requiere otro bucker para guardar eventos y tener auditoria
+
+Outputs:
+  S3ArtifactsBucket: # identificador logico
+    Description: Nombre del bucket de artefactos para el pipeline
+    Value: !Ref S3ArtifactsBucket
+    Export: 
+      Name: S3ArtifactsBucket # nombre del enchufe publico para otros stacks
+  
+  S3ArtifactsBucketArn:
+    Description: Arn del bucket de artefactos
+    Value: !GetAtt S3ArtifactsBucket.Arn
+    Export: 
+      Name: S3ArtifactsBucketArn
+  
+    

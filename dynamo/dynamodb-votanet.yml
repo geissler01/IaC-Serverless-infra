@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Tabla DynamoDB para el sistema de votantes VotaNet
+
+Parameters:
+  DynamoName:
+    Type: String
+    Description: Escribe el nombre de la tabla DynamoDB
+    Default: votanet-dev-voters
+    
+  DynamoKey:
+    Type: String
+    Description: Nombre de la clave primaria de dynamoDB (Partition key)
+    Default: cc
+
+Resources:
+  DynamoLab:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete # retain para proteger, por ahora no me interesa mucho
+    UpdateReplacePolicy: Delete
+    Properties:
+      TableName: !Ref DynamoName # nombre fisico de la tabal en aws
+      BillingMode: PAY_PER_REQUEST # bajo demando, on-demand
+      AttributeDefinitions: # el atributo de referencia, la columna o clave
+        - AttributeName: !Ref DynamoKey # nombre de la clave, en este caso cc
+          AttributeType: S # que es de tipo string
+      KeySchema: # define la llave primaria obligatoria, en ocasiones se suele usar un uuid
+        - AttributeName: !Ref DynamoKey
+          KeyType: HASH # en qué disco duro del centro de datos de AWS se almacena ese registro
+      SSESpecification: # cigrado en reposo
+        SSEEnabled: true # Garantiza que si alguien entrara físicamente a los discos de AWS, los datos estén encriptados.
+
+Outputs:
+  DynamoName:
+    Description: Nombre de la tabla creada
+    Value: !Ref DynamoLab
+    Export: 
+      Name: DynamoLab # nombre con el que se exporta la tabla
+  
+  DynamoNameArn:
+    Description: ARN de la tabla dynamo
+    Value: !GetAtt DynamoLab.Arn
+    Export: 
+      Name: DynamoLabArn # nombre ARN con el que se exporta la tabla
+    
