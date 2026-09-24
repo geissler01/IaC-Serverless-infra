@@ -124,7 +124,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # serializacion tipado uasndo el modelo de datos
         voter = VoterResponse.from_dynamo(raw_item) # pasamos por la clase y quedan organizados
         return build_response(200, {
-            'message': 'Votante encontrado',
+            'message': 'Votante encontrado exitosamente (Deploy automatico CI/CD v2.0)',
             'data': asdict(voter) # de objeto tipado a diccionario standar
         })
 
