@@ -1,18 +1,21 @@
 version: 0.2 # version actual y recomendada para CodeBuild
 
 # 1. Definicion de las fases de compilacion en CodeBuild
-phases: # instrucciones para el contenedor de CodeBuild
-  install: # prepara el entorno, en este caso con python 3.12, sam cli ya esta por defecto
+# instrucciones para el contenedor de CodeBuild
+phases:
+  # prepara el entorno, en este caso con python 3.12, sam cli ya esta por defecto
+  install:
     runtime-versions:
       python: 3.12
-    commands: # todo comienza en la raiz infra_own
+    # todo comienza en la raiz infra_own
+    commands:
       - echo "=== Fase 1: verificando herramientass en CodeBuild ==="
       - python --version
       - sam --version
 
   build:
     commands:
-      - echo "=== Fase 2: Compilando aplicacion Serverless con SAM ==="}
+      - echo "=== Fase 2: Compilando aplicacion Serverless con SAM ==="
       - cd app
       - sam build
 
@@ -26,8 +29,9 @@ phases: # instrucciones para el contenedor de CodeBuild
       - echo "=== Empaquetado terminado con exito. Archivo listo: packaged.yaml"
 
 # 2. Artefactos que viajan hacia la siguiente etapa del Pipeline (CloudFormation)
-artifects:
-  base-directory: app # esto es necesario al no tener el buildspec.yml donde esta la plantilla que va a montar
+artifacts:
+  # esto es necesario al no tener el buildspec.yml donde esta la plantilla que va a montar
+  base-directory: app
   files:
     - packaged.yaml
     - samconfig.toml
