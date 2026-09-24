@@ -24,7 +24,6 @@ phases:
     commands:
       - echo "=== Fase 3 -> Empaquetando y subiendo zip a s3 ==="
       # Toma el template compulado, sube el zip a s3 y genera un packaged.yaml
-      - cd app
       - sam package --s3-bucket ${S3_BUCKET} --output-template-file packaged.yaml
       # S3_BUCKET viene desde la fase 2, en este caso seria votanet-artefacts-841702867308-us-east-2
       - echo "=== Empaquetado terminado con exito. Archivo listo -> packaged.yaml"
@@ -35,4 +34,3 @@ artifacts:
   base-directory: app
   files:
     - packaged.yaml
-    - samconfig.toml
